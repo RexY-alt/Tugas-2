@@ -1,156 +1,145 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
-import os
 import joblib
-from sklearn.model_selection import train_test_split
-from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+from sklearn.preprocessing import LabelEncoder
 
-# Fungsi untuk mempersiapkan data
-def load_and_prepare_data():
-    # Load dataset
-    data = pd.read_csv('student-mat.csv')
-    
-    # Prepare features
-    X = data[['studytime', 'absences', 'G1', 'G2', 'age', 'famsize', 'traveltime', 'failures', 'schoolsup', 'higher']]
-    y_classification = (data['G3'] >= 13).astype(int)  # Binary target for classification
-    y_regression = data['G3']  # Continuous target for regression
-
-    # Encode categorical variables if needed
-    for col in X.select_dtypes(include=['object']).columns:
-        X[col] = X[col].astype('category').cat.codes
-
-    return X, y_classification, y_regression
-
-# Fungsi untuk melatih dan menyimpan model
-def train_and_save_models(force_retrain=False):
-    """
-    Train models and save them. If models already exist, load them unless force_retrain is True.
-    
-    Args:
-        force_retrain (bool): If True, will retrain models even if they exist
-    
-    Returns:
-        tuple: Classifier and Regressor models
-    """
-    # Paths for saving models
-    classifier_path = 'student_classifier_model.pkl'
-    regressor_path = 'student_regressor_model.pkl'
-    
-    # Check if models already exist and should not be retrained
-    if not force_retrain and os.path.exists(classifier_path) and os.path.exists(regressor_path):
-        st.info("Loading existing models...")
-        classifier = joblib.load(classifier_path)
-        regressor = joblib.load(regressor_path)
-        return classifier, regressor
-    
-    # Prepare data
-    X, y_classification, y_regression = load_and_prepare_data()
-    
-    # Split data
-    X_train_class, X_test_class, y_train_class, y_test_class = train_test_split(X, y_classification, test_size=0.2, random_state=42)
-    X_train_reg, X_test_reg, y_train_reg, y_test_reg = train_test_split(X, y_regression, test_size=0.2, random_state=42)
-
-    # Train Random Forest Classifier
-    classifier = RandomForestClassifier(random_state=42)
-    classifier.fit(X_train_class, y_train_class)
-
-    # Train Random Forest Regressor
-    regressor = RandomForestRegressor(random_state=42)
-    regressor.fit(X_train_reg, y_train_reg)
-    
-    # Save models
-    joblib.dump(classifier, classifier_path)
-    joblib.dump(regressor, regressor_path)
-    
-    st.info("Models trained and saved successfully.")
-    return classifier, regressor
-
-# Main Streamlit app
-def main():
-    st.title('Student Grade Prediction')
-    
-    # Train or load models
+def load_models():
+    """Load saved Random Forest model and scaler"""
     try:
-        classifier, regressor = train_and_save_models()
+        classifier = joblib.load('random_forest_model.pkl')
+        scaler = joblib.load('scaler.pkl')  # Load the scaler if used
+        return classifier, scaler
     except Exception as e:
-        st.error(f"Error loading models: {e}")
-        st.error("Please ensure 'student-mat.csv' is in the correct directory.")
-        return
+        st.error(f"Error loading model: {e}")
+        return None, None
+
+def preprocess_input(input_data):
+    """Preprocess input data to match training features and encode categorical variables"""
+    # List of all features used during model training (33 features)
+    expected_columns = [
+        'school', 'sex', 'age', 'address', 'famsize', 'Pstatus', 'Medu', 'Fedu', 'Mjob', 'Fjob', 'reason', 
+        'guardian', 'traveltime', 'studytime', 'failures', 'schoolsup', 'famsup', 'paid', 'activities', 
+        'nursery', 'higher', 'internet', 'romantic', 'famrel', 'freetime', 'goout', 'Dalc', 'Walc', 'health', 
+        'absences', 'G1', 'G2', 'G3'
+    ]
     
+    # Convert categorical variables to numeric using LabelEncoder
+    label_encoder = LabelEncoder()
+    
+    categorical_columns = ['school', 'sex', 'address', 'famsize', 'Pstatus', 'Mjob', 'Fjob', 'reason', 'guardian',
+                           'schoolsup', 'famsup', 'paid', 'activities', 'nursery', 'higher', 'internet', 'romantic']
+    
+    for col in categorical_columns:
+        if col in input_data:
+            input_data[col] = label_encoder.fit_transform([input_data[col]])[0]  # Encode the value of the column
+
+    # Ensure all expected columns are present (fill missing with default values)
+    for col in expected_columns:
+        if col not in input_data:
+            input_data[col] = 0  # Fill with a default value if feature is missing
+    
+    # Return as DataFrame
+    return pd.DataFrame([input_data])
+
+def predict_student_grade(input_data, classifier, scaler):
+    """Make predictions using the loaded Random Forest model"""
+    try:
+        # Preprocess and scale input data
+        input_df = preprocess_input(input_data)
+        
+        # Scale data if a scaler is available
+        if scaler:
+            input_df = scaler.transform(input_df)
+        
+        # Make predictions
+        prediction_class = classifier.predict(input_df)[0]
+        proba = classifier.predict_proba(input_df)[0]
+
+        return {
+            'pass_fail': 'Pass' if prediction_class == 1 else 'Fail',
+            'pass_probability': round(proba[1] * 100, 2)
+        }
+    except Exception as e:
+        st.error(f"Prediction error: {e}")
+        return None
+
+def main():
+    # Set page title and favicon
+    st.set_page_config(page_title="Student Grade Predictor", page_icon="🎓")
+    
+    # Load model and scaler
+    classifier, scaler = load_models()
+
+    # Title
+    st.title("🎓 Student Grade Predictor")
+    st.write("Predict student performance using a machine learning model")
+
     # Sidebar for input
-    st.sidebar.header('Student Information Input')
+    st.sidebar.header("Input Student Information")
     
-    # Input fields with default values and validation
-    studytime = st.sidebar.slider('Study Time', min_value=1, max_value=4, value=2, help='Hours of study time per week')
-    absences = st.sidebar.number_input('Absences', min_value=0, max_value=93, value=0, help='Number of school absences')
-    G1 = st.sidebar.number_input('G1 Grade', min_value=0, max_value=20, value=10, help='First period grade')
-    G2 = st.sidebar.number_input('G2 Grade', min_value=0, max_value=20, value=10, help='Second period grade')
-    age = st.sidebar.slider('Age', min_value=15, max_value=22, value=18, help='Student age')
-    famsize = st.sidebar.selectbox('Family Size', [('GT3', 1), ('LE3', 0)], format_func=lambda x: x[0], help='Family size')
-    traveltime = st.sidebar.slider('Travel Time', min_value=1, max_value=4, value=2, help='Home to school travel time')
-    failures = st.sidebar.number_input('Previous Failures', min_value=0, max_value=4, value=0, help='Number of past class failures')
-    schoolsup = st.sidebar.selectbox('School Support', [('Yes', 1), ('No', 0)], format_func=lambda x: x[0], help='Extra educational support')
-    higher = st.sidebar.selectbox('Want Higher Education', [('Yes', 1), ('No', 0)], format_func=lambda x: x[0], help='Desire for higher education')
-    
-    # Prepare user input
-    user_input = pd.DataFrame({
-        'studytime': [studytime],
-        'absences': [absences],
-        'G1': [G1],
-        'G2': [G2],
-        'age': [age],
-        'famsize': [famsize[1]],
-        'traveltime': [traveltime],
-        'failures': [failures],
-        'schoolsup': [schoolsup[1]],
-        'higher': [higher[1]]
-    })
-    
-    # Prediction section
-    st.header('Prediction Results')
-    
-    # Classification prediction (Pass/Fail)
-    prediction_class = classifier.predict(user_input)[0]
-    class_proba = classifier.predict_proba(user_input)[0]
-    
-    # Regression prediction (G3 grade)
-    prediction_reg = regressor.predict(user_input)[0]
-    
-    # Display results
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.metric('Pass/Fail Prediction', 'Pass' if prediction_class == 1 else 'Fail')
-        st.metric('Probability of Passing', f'{class_proba[1]:.2%}')
-    
-    with col2:
-        st.metric('Predicted Final Grade (G3)', f'{prediction_reg:.2f}')
-    
-    # Optional: Feature importance visualization
-    st.header('Model Insights')
-    st.text('Feature importances for predicting student performance')
-    
-    # Get feature importances
-    feature_importance = pd.DataFrame({
-        'feature': ['studytime', 'absences', 'G1', 'G2', 'age', 'famsize', 'traveltime', 'failures', 'schoolsup', 'higher'],
-        'importance': regressor.feature_importances_
-    }).sort_values('importance', ascending=False)
-    
-    st.bar_chart(feature_importance.set_index('feature'))
+    # Input fields
+    input_data = {}
+    input_data['school'] = st.sidebar.selectbox("School", ['GP', 'MS'])  # Assuming 'GP' and 'MS' are possible values
+    input_data['sex'] = st.sidebar.selectbox("Sex", ['M', 'F'])  # 'M' for Male, 'F' for Female
+    input_data['age'] = st.sidebar.number_input("Age (15-22)", min_value=15, max_value=22, value=18)
+    input_data['address'] = st.sidebar.selectbox("Address", ['U', 'R'])  # 'U' for Urban, 'R' for Rural
+    input_data['famsize'] = st.sidebar.selectbox("Family Size", ['LE3', 'GT3'])  # 'LE3' for less than or equal to 3 members, 'GT3' for greater than 3 members
+    input_data['Pstatus'] = st.sidebar.selectbox("Parental Status", ['T', 'A'])  # 'T' for Together, 'A' for Apart
+    input_data['Medu'] = st.sidebar.number_input("Mother's Education (0-4)", min_value=0, max_value=4, value=2)
+    input_data['Fedu'] = st.sidebar.number_input("Father's Education (0-4)", min_value=0, max_value=4, value=2)
+    input_data['Mjob'] = st.sidebar.selectbox("Mother's Job", ['teacher', 'health', 'services', 'at_home', 'other'])
+    input_data['Fjob'] = st.sidebar.selectbox("Father's Job", ['teacher', 'health', 'services', 'at_home', 'other'])
+    input_data['reason'] = st.sidebar.selectbox("Reason for Choosing School", ['home', 'reputation', 'course', 'other'])
+    input_data['guardian'] = st.sidebar.selectbox("Guardian", ['mother', 'father', 'other'])
+    input_data['traveltime'] = st.sidebar.slider("Travel Time (1-4)", min_value=1, max_value=4, value=2)
+    input_data['studytime'] = st.sidebar.slider("Study Time (1-4)", min_value=1, max_value=4, value=2)
+    input_data['failures'] = st.sidebar.number_input("Number of Failures (0-4)", min_value=0, max_value=4, value=0)
+    input_data['schoolsup'] = st.sidebar.selectbox("School Support", ['yes', 'no'])
+    input_data['famsup'] = st.sidebar.selectbox("Family Support", ['yes', 'no'])
+    input_data['paid'] = st.sidebar.selectbox("Extra Paid Classes", ['yes', 'no'])
+    input_data['activities'] = st.sidebar.selectbox("Extra Activities", ['yes', 'no'])
+    input_data['nursery'] = st.sidebar.selectbox("Nursery", ['yes', 'no'])
+    input_data['higher'] = st.sidebar.selectbox("Desire for Higher Education", ['yes', 'no'])
+    input_data['internet'] = st.sidebar.selectbox("Internet Access", ['yes', 'no'])
+    input_data['romantic'] = st.sidebar.selectbox("Romantic Relationship", ['yes', 'no'])
+    input_data['famrel'] = st.sidebar.number_input("Family Relationship Quality (1-5)", min_value=1, max_value=5, value=4)
+    input_data['freetime'] = st.sidebar.number_input("Free Time (1-5)", min_value=1, max_value=5, value=3)
+    input_data['goout'] = st.sidebar.number_input("Going Out (1-5)", min_value=1, max_value=5, value=3)
+    input_data['Dalc'] = st.sidebar.number_input("Workday Alcohol Consumption (1-5)", min_value=1, max_value=5, value=3)
+    input_data['Walc'] = st.sidebar.number_input("Weekend Alcohol Consumption (1-5)", min_value=1, max_value=5, value=3)
+    input_data['health'] = st.sidebar.number_input("Health (1-5)", min_value=1, max_value=5, value=3)
+    input_data['absences'] = st.sidebar.number_input("Number of Absences (0-93)", min_value=0, max_value=93, value=0)
+    input_data['G1'] = st.sidebar.number_input("G1 Grade (0-20)", min_value=0, max_value=20, value=10)
+    input_data['G2'] = st.sidebar.number_input("G2 Grade (0-20)", min_value=0, max_value=20, value=10)
 
-# Tambahkan requirements.txt berikut
-def create_requirements():
-    requirements = """
-streamlit
-pandas
-numpy
-scikit-learn
-joblib
-    """
-    with open('requirements.txt', 'w') as f:
-        f.write(requirements.strip())
+    # Prediction button
+    if st.sidebar.button("Predict Grade"):
+        if classifier:
+            # Make prediction
+            result = predict_student_grade(input_data, classifier, scaler)
+            
+            if result:
+                # Display results
+                st.header("Prediction Results")
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.metric("Pass/Fail", result['pass_fail'])
+                
+                with col2:
+                    st.metric("Passing Probability", f"{result['pass_probability']}%")
+                
+                # Additional insights
+                st.subheader("Insights")
+                if result['pass_fail'] == 'Pass':
+                    st.success("Great job! Keep up the good work!")
+                else:
+                    st.warning("You might need additional support. Consider studying more or seeking help.")
+    
+    # Footer
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("Powered by Machine Learning")
 
-if __name__ == '__main__':
-    create_requirements()  # Buat file requirements.txt
+if __name__ == "__main__":
     main()
