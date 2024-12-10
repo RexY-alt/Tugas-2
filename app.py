@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import joblib
+from sklearn.preprocessing import LabelEncoder
 
 def load_models():
     """Load saved Random Forest model and scaler"""
@@ -12,13 +13,32 @@ def load_models():
         st.error(f"Error loading model: {e}")
         return None, None
 
+def preprocess_input(input_data):
+    """Preprocess input data to match training features and encode categorical variables"""
+    # Convert categorical data to numerical using LabelEncoder
+    label_encoder = LabelEncoder()
+    
+    input_data['famsize'] = label_encoder.fit_transform([input_data['famsize']])[0]
+    input_data['schoolsup'] = label_encoder.fit_transform([input_data['schoolsup']])[0]
+    input_data['higher'] = label_encoder.fit_transform([input_data['higher']])[0]
+    
+    # Ensure all expected columns are present, and order matches model input
+    expected_columns = ['studytime', 'absences', 'G1', 'G2', 'age', 'famsize', 'traveltime', 'failures', 'schoolsup', 'higher']
+    
+    # If any features are missing, add them with default values (like zero for numeric or 'no' for categorical)
+    for col in expected_columns:
+        if col not in input_data:
+            input_data[col] = 0 if col != 'famsize' and col != 'schoolsup' and col != 'higher' else 0  # Default to 0
+
+    return pd.DataFrame([input_data])
+
 def predict_student_grade(input_data, classifier, scaler):
     """Make predictions using the loaded Random Forest model"""
     try:
-        # Convert input data to a DataFrame
-        input_df = pd.DataFrame([input_data])
+        # Preprocess and scale input data
+        input_df = preprocess_input(input_data)
         
-        # If scaling is used during training, scale the input data here
+        # Scale data if a scaler is available
         if scaler:
             input_df = scaler.transform(input_df)
         
