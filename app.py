@@ -1,8 +1,70 @@
-# app.py
 import streamlit as st
 import pandas as pd
+import numpy as np
+import os
 import joblib
-from model_utils import train_and_save_models
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+
+# Fungsi untuk mempersiapkan data
+def load_and_prepare_data():
+    # Load dataset
+    data = pd.read_csv('student-mat.csv')
+    
+    # Prepare features
+    X = data[['studytime', 'absences', 'G1', 'G2', 'age', 'famsize', 'traveltime', 'failures', 'schoolsup', 'higher']]
+    y_classification = (data['G3'] >= 13).astype(int)  # Binary target for classification
+    y_regression = data['G3']  # Continuous target for regression
+
+    # Encode categorical variables if needed
+    for col in X.select_dtypes(include=['object']).columns:
+        X[col] = X[col].astype('category').cat.codes
+
+    return X, y_classification, y_regression
+
+# Fungsi untuk melatih dan menyimpan model
+def train_and_save_models(force_retrain=False):
+    """
+    Train models and save them. If models already exist, load them unless force_retrain is True.
+    
+    Args:
+        force_retrain (bool): If True, will retrain models even if they exist
+    
+    Returns:
+        tuple: Classifier and Regressor models
+    """
+    # Paths for saving models
+    classifier_path = 'student_classifier_model.pkl'
+    regressor_path = 'student_regressor_model.pkl'
+    
+    # Check if models already exist and should not be retrained
+    if not force_retrain and os.path.exists(classifier_path) and os.path.exists(regressor_path):
+        st.info("Loading existing models...")
+        classifier = joblib.load(classifier_path)
+        regressor = joblib.load(regressor_path)
+        return classifier, regressor
+    
+    # Prepare data
+    X, y_classification, y_regression = load_and_prepare_data()
+    
+    # Split data
+    X_train_class, X_test_class, y_train_class, y_test_class = train_test_split(X, y_classification, test_size=0.2, random_state=42)
+    X_train_reg, X_test_reg, y_train_reg, y_test_reg = train_test_split(X, y_regression, test_size=0.2, random_state=42)
+
+    # Train Random Forest Classifier
+    classifier = RandomForestClassifier(random_state=42)
+    classifier.fit(X_train_class, y_train_class)
+
+    # Train Random Forest Regressor
+    regressor = RandomForestRegressor(random_state=42)
+    regressor.fit(X_train_reg, y_train_reg)
+    
+    # Save models
+    joblib.dump(classifier, classifier_path)
+    joblib.dump(regressor, regressor_path)
+    
+    st.info("Models trained and saved successfully.")
+    return classifier, regressor
 
 # Main Streamlit app
 def main():
@@ -77,5 +139,18 @@ def main():
     
     st.bar_chart(feature_importance.set_index('feature'))
 
+# Tambahkan requirements.txt berikut
+def create_requirements():
+    requirements = """
+streamlit
+pandas
+numpy
+scikit-learn
+joblib
+    """
+    with open('requirements.txt', 'w') as f:
+        f.write(requirements.strip())
+
 if __name__ == '__main__':
+    create_requirements()  # Buat file requirements.txt
     main()
