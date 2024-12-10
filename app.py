@@ -1,100 +1,81 @@
+# app.py
 import streamlit as st
-import joblib
 import pandas as pd
-import numpy as np
+import joblib
+from model_utils import train_and_save_models
 
-def load_models():
-    """Load saved models and scaler"""
+# Main Streamlit app
+def main():
+    st.title('Student Grade Prediction')
+    
+    # Train or load models
     try:
-        regressor = joblib.load('regressor_model.pkl')
-        scaler = joblib.load('feature_scaler.pkl')
-        return classifier, regressor, scaler
+        classifier, regressor = train_and_save_models()
     except Exception as e:
         st.error(f"Error loading models: {e}")
-        return None, None, None
-
-def predict_student_grade(input_data, classifier, regressor, scaler):
-    """Make predictions using loaded models"""
-    try:
-        # Prepare input data
-        input_df = pd.DataFrame([input_data])
-        
-        # Scale the features
-        input_scaled = scaler.transform(input_df)
-
-        # Make predictions
-        prediction_class = classifier.predict(input_scaled)[0]
-        prediction_reg = regressor.predict(input_scaled)[0]
-        proba = classifier.predict_proba(input_scaled)[0]
-
-        return {
-            'pass_fail': 'Pass' if prediction_class == 1 else 'Fail',
-            'predicted_grade': round(prediction_reg, 2),
-            'pass_probability': round(proba[1] * 100, 2)
-        }
-    except Exception as e:
-        st.error(f"Prediction error: {e}")
-        return None
-
-def main():
-    # Set page title and favicon
-    st.set_page_config(page_title="Student Grade Predictor", page_icon=":student:")
-
-    # Load models
-    classifier, regressor, scaler = load_models()
+        st.error("Please ensure 'student-mat.csv' is in the correct directory.")
+        return
     
-    # Main title
-    st.title("🎓 Student Grade Prediction")
-    st.write("Predict student performance using machine learning")
-
-    # Sidebar for user inputs
-    st.sidebar.header("Input Student Information")
+    # Sidebar for input
+    st.sidebar.header('Student Information Input')
     
-    # Input fields
-    input_data = {}
-    input_data['studytime'] = st.sidebar.slider("Study Time (1-4)", min_value=1, max_value=4, value=2)
-    input_data['absences'] = st.sidebar.number_input("Number of Absences (0-93)", min_value=0, max_value=93, value=0)
-    input_data['G1'] = st.sidebar.number_input("G1 Grade (0-20)", min_value=0, max_value=20, value=10)
-    input_data['G2'] = st.sidebar.number_input("G2 Grade (0-20)", min_value=0, max_value=20, value=10)
-    input_data['age'] = st.sidebar.number_input("Age (15-22)", min_value=15, max_value=22, value=18)
-    input_data['famsize'] = st.sidebar.selectbox("Family Size", [0, 1], format_func=lambda x: "LE3" if x == 0 else "GT3")
-    input_data['traveltime'] = st.sidebar.slider("Travel Time (1-4)", min_value=1, max_value=4, value=2)
-    input_data['failures'] = st.sidebar.number_input("Number of Failures (0-4)", min_value=0, max_value=4, value=0)
-    input_data['schoolsup'] = st.sidebar.selectbox("School Support", [0, 1], format_func=lambda x: "No" if x == 0 else "Yes")
-    input_data['higher'] = st.sidebar.selectbox("Higher Education Desire", [0, 1], format_func=lambda x: "No" if x == 0 else "Yes")
+    # Input fields with default values and validation
+    studytime = st.sidebar.slider('Study Time', min_value=1, max_value=4, value=2, help='Hours of study time per week')
+    absences = st.sidebar.number_input('Absences', min_value=0, max_value=93, value=0, help='Number of school absences')
+    G1 = st.sidebar.number_input('G1 Grade', min_value=0, max_value=20, value=10, help='First period grade')
+    G2 = st.sidebar.number_input('G2 Grade', min_value=0, max_value=20, value=10, help='Second period grade')
+    age = st.sidebar.slider('Age', min_value=15, max_value=22, value=18, help='Student age')
+    famsize = st.sidebar.selectbox('Family Size', [('GT3', 1), ('LE3', 0)], format_func=lambda x: x[0], help='Family size')
+    traveltime = st.sidebar.slider('Travel Time', min_value=1, max_value=4, value=2, help='Home to school travel time')
+    failures = st.sidebar.number_input('Previous Failures', min_value=0, max_value=4, value=0, help='Number of past class failures')
+    schoolsup = st.sidebar.selectbox('School Support', [('Yes', 1), ('No', 0)], format_func=lambda x: x[0], help='Extra educational support')
+    higher = st.sidebar.selectbox('Want Higher Education', [('Yes', 1), ('No', 0)], format_func=lambda x: x[0], help='Desire for higher education')
+    
+    # Prepare user input
+    user_input = pd.DataFrame({
+        'studytime': [studytime],
+        'absences': [absences],
+        'G1': [G1],
+        'G2': [G2],
+        'age': [age],
+        'famsize': [famsize[1]],
+        'traveltime': [traveltime],
+        'failures': [failures],
+        'schoolsup': [schoolsup[1]],
+        'higher': [higher[1]]
+    })
+    
+    # Prediction section
+    st.header('Prediction Results')
+    
+    # Classification prediction (Pass/Fail)
+    prediction_class = classifier.predict(user_input)[0]
+    class_proba = classifier.predict_proba(user_input)[0]
+    
+    # Regression prediction (G3 grade)
+    prediction_reg = regressor.predict(user_input)[0]
+    
+    # Display results
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.metric('Pass/Fail Prediction', 'Pass' if prediction_class == 1 else 'Fail')
+        st.metric('Probability of Passing', f'{class_proba[1]:.2%}')
+    
+    with col2:
+        st.metric('Predicted Final Grade (G3)', f'{prediction_reg:.2f}')
+    
+    # Optional: Feature importance visualization
+    st.header('Model Insights')
+    st.text('Feature importances for predicting student performance')
+    
+    # Get feature importances
+    feature_importance = pd.DataFrame({
+        'feature': ['studytime', 'absences', 'G1', 'G2', 'age', 'famsize', 'traveltime', 'failures', 'schoolsup', 'higher'],
+        'importance': regressor.feature_importances_
+    }).sort_values('importance', ascending=False)
+    
+    st.bar_chart(feature_importance.set_index('feature'))
 
-    # Prediction button
-    if st.sidebar.button("Predict Grade"):
-        if classifier and regressor and scaler:
-            # Make prediction
-            result = predict_student_grade(input_data, classifier, regressor, scaler)
-            
-            if result:
-                # Display results in main area
-                st.header("Prediction Results")
-                
-                # Columns for better layout
-                col1, col2, col3 = st.columns(3)
-                
-                with col1:
-                    st.metric("Pass/Fail", result['pass_fail'])
-                
-                with col2:
-                    st.metric("Predicted Grade", result['predicted_grade'])
-                
-                with col3:
-                    st.metric("Passing Probability", f"{result['pass_probability']}%")
-                
-                # Additional insights
-                st.subheader("Insights")
-                if result['pass_fail'] == 'Pass':
-                    st.success("Great job! Keep up the good work!")
-                else:
-                    st.warning("You might need additional support. Consider studying more or seeking help.")
-
-    # Footer
-    st.sidebar.markdown("---")
-    st.sidebar.markdown("Machine Learning Student Grade Predictor")
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
