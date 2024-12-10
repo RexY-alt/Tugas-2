@@ -1,36 +1,28 @@
 import streamlit as st
-import joblib
 import pandas as pd
-import numpy as np
+import joblib
 
 def load_models():
-    """Load saved models and scaler"""
+    """Load saved Random Forest model"""
     try:
-        classifier = joblib.load('classifier_model.pkl')
-        regressor = joblib.load('regressor_model.pkl')
-        scaler = joblib.load('feature_scaler.pkl')
-        return classifier, regressor, scaler
+        classifier = joblib.load('random_forest_model.pkl')
+        return classifier
     except Exception as e:
-        st.error(f"Error loading models: {e}")
-        return None, None, None
+        st.error(f"Error loading model: {e}")
+        return None
 
-def predict_student_grade(input_data, classifier, regressor, scaler):
-    """Make predictions using loaded models"""
+def predict_student_grade(input_data, classifier):
+    """Make predictions using the loaded Random Forest model"""
     try:
         # Prepare input data
         input_df = pd.DataFrame([input_data])
         
-        # Scale the features
-        input_scaled = scaler.transform(input_df)
-
         # Make predictions
-        prediction_class = classifier.predict(input_scaled)[0]
-        prediction_reg = regressor.predict(input_scaled)[0]
-        proba = classifier.predict_proba(input_scaled)[0]
+        prediction_class = classifier.predict(input_df)[0]
+        proba = classifier.predict_proba(input_df)[0]
 
         return {
             'pass_fail': 'Pass' if prediction_class == 1 else 'Fail',
-            'predicted_grade': round(prediction_reg, 2),
             'pass_probability': round(proba[1] * 100, 2)
         }
     except Exception as e:
@@ -39,16 +31,16 @@ def predict_student_grade(input_data, classifier, regressor, scaler):
 
 def main():
     # Set page title and favicon
-    st.set_page_config(page_title="Student Grade Predictor", page_icon=":student:")
-
-    # Load models
-    classifier, regressor, scaler = load_models()
+    st.set_page_config(page_title="Student Grade Predictor", page_icon="🎓")
     
-    # Main title
-    st.title("🎓 Student Grade Prediction")
-    st.write("Predict student performance using machine learning")
+    # Load model
+    classifier = load_models()
 
-    # Sidebar for user inputs
+    # Title
+    st.title("🎓 Student Grade Predictor")
+    st.write("Predict student performance using a machine learning model")
+
+    # Sidebar for input
     st.sidebar.header("Input Student Information")
     
     # Input fields
@@ -66,24 +58,20 @@ def main():
 
     # Prediction button
     if st.sidebar.button("Predict Grade"):
-        if classifier and regressor and scaler:
+        if classifier:
             # Make prediction
-            result = predict_student_grade(input_data, classifier, regressor, scaler)
+            result = predict_student_grade(input_data, classifier)
             
             if result:
-                # Display results in main area
+                # Display results
                 st.header("Prediction Results")
                 
-                # Columns for better layout
-                col1, col2, col3 = st.columns(3)
+                col1, col2 = st.columns(2)
                 
                 with col1:
                     st.metric("Pass/Fail", result['pass_fail'])
                 
                 with col2:
-                    st.metric("Predicted Grade", result['predicted_grade'])
-                
-                with col3:
                     st.metric("Passing Probability", f"{result['pass_probability']}%")
                 
                 # Additional insights
@@ -92,10 +80,9 @@ def main():
                     st.success("Great job! Keep up the good work!")
                 else:
                     st.warning("You might need additional support. Consider studying more or seeking help.")
-
     # Footer
     st.sidebar.markdown("---")
-    st.sidebar.markdown("Machine Learning Student Grade Predictor")
+    st.sidebar.markdown("Powered by Machine Learning")
 
 if __name__ == "__main__":
     main()
