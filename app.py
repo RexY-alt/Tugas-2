@@ -15,30 +15,26 @@ def load_models():
 
 def preprocess_input(input_data):
     """Preprocess input data to match training features and encode categorical variables"""
-    # Convert categorical data to numerical using LabelEncoder
+    # Initialize LabelEncoder
     label_encoder = LabelEncoder()
     
+    # Convert categorical variables (use LabelEncoder)
     input_data['famsize'] = label_encoder.fit_transform([input_data['famsize']])[0]
     input_data['schoolsup'] = label_encoder.fit_transform([input_data['schoolsup']])[0]
     input_data['higher'] = label_encoder.fit_transform([input_data['higher']])[0]
     
-    # Ensure all expected columns are present, and order matches model input
-    expected_columns = ['studytime', 'absences', 'G1', 'G2', 'age', 'famsize', 'traveltime', 'failures', 'schoolsup', 'higher']
-    
-    # If any features are missing, add them with default values (like zero for numeric or 'no' for categorical)
-    for col in expected_columns:
-        if col not in input_data:
-            input_data[col] = 0 if col != 'famsize' and col != 'schoolsup' and col != 'higher' else 0  # Default to 0
+    # Convert the input data to a DataFrame
+    input_df = pd.DataFrame([input_data])
 
-    return pd.DataFrame([input_data])
+    return input_df
 
 def predict_student_grade(input_data, classifier, scaler):
     """Make predictions using the loaded Random Forest model"""
     try:
-        # Preprocess and scale input data
+        # Preprocess the input data (encoding and scaling)
         input_df = preprocess_input(input_data)
         
-        # Scale data if a scaler is available
+        # Scale the input data if scaler is available
         if scaler:
             input_df = scaler.transform(input_df)
         
@@ -68,18 +64,18 @@ def main():
     # Sidebar for input
     st.sidebar.header("Input Student Information")
     
-    # Input fields
+    # Input fields (only the 10 selected features)
     input_data = {}
     input_data['studytime'] = st.sidebar.slider("Study Time (1-4)", min_value=1, max_value=4, value=2)
     input_data['absences'] = st.sidebar.number_input("Number of Absences (0-93)", min_value=0, max_value=93, value=0)
     input_data['G1'] = st.sidebar.number_input("G1 Grade (0-20)", min_value=0, max_value=20, value=10)
     input_data['G2'] = st.sidebar.number_input("G2 Grade (0-20)", min_value=0, max_value=20, value=10)
     input_data['age'] = st.sidebar.number_input("Age (15-22)", min_value=15, max_value=22, value=18)
-    input_data['famsize'] = st.sidebar.selectbox("Family Size", [0, 1], format_func=lambda x: "LE3" if x == 0 else "GT3")
+    input_data['famsize'] = st.sidebar.selectbox("Family Size", ["LE3", "GT3"])
     input_data['traveltime'] = st.sidebar.slider("Travel Time (1-4)", min_value=1, max_value=4, value=2)
     input_data['failures'] = st.sidebar.number_input("Number of Failures (0-4)", min_value=0, max_value=4, value=0)
-    input_data['schoolsup'] = st.sidebar.selectbox("School Support", [0, 1], format_func=lambda x: "No" if x == 0 else "Yes")
-    input_data['higher'] = st.sidebar.selectbox("Higher Education Desire", [0, 1], format_func=lambda x: "No" if x == 0 else "Yes")
+    input_data['schoolsup'] = st.sidebar.selectbox("School Support", ["No", "Yes"])
+    input_data['higher'] = st.sidebar.selectbox("Higher Education Desire", ["No", "Yes"])
 
     # Prediction button
     if st.sidebar.button("Predict Grade"):
