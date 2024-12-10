@@ -15,7 +15,7 @@ def load_models():
 
 def preprocess_input(input_data):
     """Preprocess input data to match training features and encode categorical variables"""
-    # List of all features used during model training (assuming 33 features based on your dataset)
+    # List of all features used during model training (33 features as per your dataset)
     expected_columns = [
         'school', 'sex', 'age', 'address', 'famsize', 'Pstatus', 'Medu', 'Fedu', 'Mjob', 'Fjob', 'reason', 
         'guardian', 'traveltime', 'studytime', 'failures', 'schoolsup', 'famsup', 'paid', 'activities', 
@@ -35,7 +35,10 @@ def preprocess_input(input_data):
     # Ensure all expected columns are present (fill missing with default values)
     for col in expected_columns:
         if col not in input_data:
-            input_data[col] = 0  # Fill with a default value if feature is missing
+            if col in categorical_columns:
+                input_data[col] = label_encoder.fit_transform(['no'])[0]  # Default to 'no' for categorical
+            else:
+                input_data[col] = 0  # Fill with 0 for numeric columns
     
     # Reorder input to match expected columns (ensure the correct order)
     input_df = pd.DataFrame([input_data])[expected_columns]
