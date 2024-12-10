@@ -6,7 +6,6 @@ import numpy as np
 def load_models():
     """Load saved models and scaler"""
     try:
-        classifier = joblib.load('classifier_model.pkl')
         regressor = joblib.load('regressor_model.pkl')
         scaler = joblib.load('feature_scaler.pkl')
         return classifier, regressor, scaler
