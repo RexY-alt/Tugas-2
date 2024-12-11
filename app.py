@@ -1,55 +1,55 @@
 import streamlit as st
 import pandas as pd
 import joblib
-from sklearn.preprocessing import LabelEncoder
+from sklearn.preprocessing import LabelEncoder, StandardScaler
 
-# Load models with specific exception handling for compatibility
 def load_models():
     """Load saved Random Forest model and scaler"""
     try:
-        # Explicitly set the paths relative to the current directory
         classifier = joblib.load('random_forest_model.pkl')
-        scaler = joblib.load('scaler.pkl')  # Load the scaler if used
+        scaler = joblib.load('scaler.pkl')
         return classifier, scaler
     except Exception as e:
         st.error(f"Error loading model: {e}")
         return None, None
 
-def preprocess_input(input_data, expected_columns):
+def preprocess_input(input_data, label_encoders, scaler):
     """
     Preprocess input data to match training features and encode categorical variables
     """
-    # Default values for all features
-    default_values = {col: 0 for col in expected_columns}
+    # Define expected columns
+    expected_columns = ['studytime', 'absences', 'G1', 'G2', 'age', 'famsize', 'traveltime', 'failures', 'schoolsup', 'higher']
 
-    # Fill missing values with defaults
+    # Fill missing values with default values
+    default_values = {
+        'studytime': 2, 'absences': 0, 'G1': 10, 'G2': 10, 'age': 18,
+        'famsize': 'GT3', 'traveltime': 1, 'failures': 0, 'schoolsup': 'no', 'higher': 'yes'
+    }
+
     processed_data = {col: input_data.get(col, default_values[col]) for col in expected_columns}
+
+    # Encode categorical variables
+    for col in ['famsize', 'schoolsup', 'higher']:
+        if col in processed_data:
+            processed_data[col] = label_encoders[col].transform([processed_data[col]])[0]
 
     # Convert to DataFrame
     input_df = pd.DataFrame([processed_data])
 
-    return input_df
+    # Scale the input data
+    input_scaled = scaler.transform(input_df)
 
+    return input_scaled
 
-def predict_student_grade(input_data, classifier, scaler):
+def predict_student_grade(input_data, classifier, scaler, label_encoders):
     """Make predictions using the loaded Random Forest model"""
     try:
-        # Get the column names used during training
-        expected_columns = classifier.feature_names_in_
-
-        # Preprocess input data to match training features
-        input_df = preprocess_input(input_data, expected_columns)
-
-        # Scale data if a scaler is available
-        if scaler:
-            input_df = scaler.transform(input_df)
-
-        # Ensure column order matches the model
-        input_df = input_df[expected_columns]
+        # Preprocess input data
+        input_scaled = preprocess_input(input_data, label_encoders, scaler)
 
         # Make predictions
-        prediction_class = classifier.predict(input_df)[0]
-        proba = classifier.predict_proba(input_df)[0]
+        prediction_class = classifier.predict(input_scaled)[0]
+        proba = classifier.predict_proba(input_scaled)[0]
 
         return {
             'pass_fail': 'Pass' if prediction_class == 1 else 'Fail',
@@ -65,14 +65,18 @@ def main():
 
     # Load model and scaler
     classifier, scaler = load_models()
-
     if not classifier:
         return
 
+    # Initialize LabelEncoders for categorical variables
+    label_encoders = {
+        'famsize': LabelEncoder().fit(['LE3', 'GT3']),
+        'schoolsup': LabelEncoder().fit(['no', 'yes']),
+        'higher': LabelEncoder().fit(['no', 'yes'])
+    }
+
     # Input fields for the 10 features
     input_data = {}
-
-    # Numeric and categorical inputs
     input_data['studytime'] = st.sidebar.slider("Study Time (1-4)", min_value=1, max_value=4, value=2)
     input_data['absences'] = st.sidebar.number_input("Number of Absences (0-93)", min_value=0, max_value=93, value=0)
     input_data['G1'] = st.sidebar.number_input("G1 Grade (0-20)", min_value=0, max_value=20, value=10)
@@ -88,7 +92,7 @@ def main():
     if st.sidebar.button("Predict Grade"):
         if classifier:
             # Make prediction
-            result = predict_student_grade(input_data, classifier, scaler)
+            result = predict_student_grade(input_data, classifier, scaler, label_encoders)
 
             if result:
                 # Display results
