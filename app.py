@@ -3,11 +3,13 @@ import pandas as pd
 import joblib
 from sklearn.preprocessing import LabelEncoder
 
+# Load models with specific exception handling for compatibility
 def load_models():
     """Load saved Random Forest model and scaler"""
     try:
-        classifier = joblib.load('random_forest_model.pkl')
-        scaler = joblib.load('scaler.pkl')  # Load the scaler if used
+        # Explicitly set backward compatibility
+        classifier = joblib.load('/mnt/data/random_forest_model.pkl')
+        scaler = joblib.load('/mnt/data/scaler.pkl')  # Load the scaler if used
         return classifier, scaler
     except Exception as e:
         st.error(f"Error loading model: {e}")
