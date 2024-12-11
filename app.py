@@ -18,26 +18,9 @@ def load_models():
 def preprocess_input(input_data, expected_columns):
     """
     Preprocess input data to match training features and encode categorical variables
-
-    Args:
-    input_data (dict): Dictionary of input features
-    expected_columns (list): List of columns used during model training
-
-    Returns:
-    pd.DataFrame: Preprocessed input data
     """
-    label_encoder = LabelEncoder()
-
     # Default values for all features
-    default_values = {
-        'school': 'GP', 'sex': 'F', 'age': 18, 'address': 'U', 'famsize': 'GT3',
-        'Pstatus': 'T', 'Medu': 2, 'Fedu': 2, 'Mjob': 'other', 'Fjob': 'other',
-        'reason': 'course', 'guardian': 'mother', 'traveltime': 1, 'studytime': 2,
-        'failures': 0, 'schoolsup': 'no', 'famsup': 'yes', 'paid': 'no',
-        'activities': 'no', 'nursery': 'yes', 'higher': 'yes', 'internet': 'yes',
-        'romantic': 'no', 'famrel': 4, 'freetime': 3, 'goout': 3, 'Dalc': 1,
-        'Walc': 1, 'health': 5, 'absences': 0, 'G1': 10, 'G2': 10, 'G3': 10
-    }
+    default_values = {col: 0 for col in expected_columns}
 
     # Fill missing values with defaults
     processed_data = {col: input_data.get(col, default_values[col]) for col in expected_columns}
@@ -46,6 +29,7 @@ def preprocess_input(input_data, expected_columns):
     input_df = pd.DataFrame([processed_data])
 
     return input_df
+
 
 def predict_student_grade(input_data, classifier, scaler):
     """Make predictions using the loaded Random Forest model"""
@@ -59,6 +43,9 @@ def predict_student_grade(input_data, classifier, scaler):
         # Scale data if a scaler is available
         if scaler:
             input_df = scaler.transform(input_df)
+
+        # Ensure column order matches the model
+        input_df = input_df[expected_columns]
 
         # Make predictions
         prediction_class = classifier.predict(input_df)[0]
