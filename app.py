@@ -13,51 +13,61 @@ def load_models():
         st.error(f"Error loading model: {e}")
         return None, None
 
-def preprocess_input(input_data):
-    """Preprocess input data to match training features and encode categorical variables"""
-    # List of all features used during model training (33 features as per your dataset)
-    expected_columns = [
-        'school', 'sex', 'age', 'address', 'famsize', 'Pstatus', 'Medu', 'Fedu', 'Mjob', 'Fjob', 'reason', 
-        'guardian', 'traveltime', 'studytime', 'failures', 'schoolsup', 'famsup', 'paid', 'activities', 
-        'nursery', 'higher', 'internet', 'romantic', 'famrel', 'freetime', 'goout', 'Dalc', 'Walc', 'health', 
-        'absences', 'G1', 'G2', 'G3'
-    ]
+def preprocess_input(input_data, expected_columns):
+    """
+    Preprocess input data to match training features and encode categorical variables
     
-    # Convert categorical variables to numeric using LabelEncoder
+    Args:
+    input_data (dict): Dictionary of input features
+    expected_columns (list): List of columns used during model training
+    
+    Returns:
+    pd.DataFrame: Preprocessed input data
+    """
+    # Initialize Label Encoder for categorical variables
     label_encoder = LabelEncoder()
     
-    categorical_columns = ['famsize', 'schoolsup', 'higher']  # Only encode categorical columns that are required
+    # Categorical columns that need encoding
+    categorical_columns = ['famsize', 'schoolsup', 'higher']
     
+    # Create a copy of input data to avoid modifying the original
+    processed_data = input_data.copy()
+    
+    # Encode categorical variables
     for col in categorical_columns:
-        if col in input_data:
-            input_data[col] = label_encoder.fit_transform([input_data[col]])[0]  # Encode the value of the column
-
-    # Ensure all expected columns are present (fill missing with default values)
-    for col in expected_columns:
-        if col not in input_data:
-            if col in categorical_columns:
-                input_data[col] = label_encoder.fit_transform(['no'])[0]  # Default to 'no' for categorical
-            else:
-                input_data[col] = 0  # Fill with 0 for numeric columns
+        if col in processed_data:
+            # Encode the categorical variable
+            processed_data[col] = label_encoder.fit_transform([processed_data[col]])[0]
     
-    # Reorder input to match expected columns (ensure the correct order)
-    input_df = pd.DataFrame([input_data])[expected_columns]
+    # Ensure all expected columns are present
+    for col in expected_columns:
+        if col not in processed_data:
+            # Add missing columns with a default value
+            processed_data[col] = 0
+    
+    # Create DataFrame with exact columns in the expected order
+    input_df = pd.DataFrame([processed_data])[expected_columns]
     
     return input_df
 
 def predict_student_grade(input_data, classifier, scaler):
     """Make predictions using the loaded Random Forest model"""
     try:
-        # Preprocess and scale input data
-        input_df = preprocess_input(input_data)
+        # Get the column names used during training
+        expected_columns = classifier.feature_names_in_
+        
+        # Preprocess input data to match training features
+        input_df = preprocess_input(input_data, expected_columns)
         
         # Scale data if a scaler is available
-        if scaler:
-            input_df = scaler.transform(input_df)
+        if scaler is not None:
+            input_df_scaled = scaler.transform(input_df)
+        else:
+            input_df_scaled = input_df
         
         # Make predictions
-        prediction_class = classifier.predict(input_df)[0]
-        proba = classifier.predict_proba(input_df)[0]
+        prediction_class = classifier.predict(input_df_scaled)[0]
+        proba = classifier.predict_proba(input_df_scaled)[0]
 
         return {
             'pass_fail': 'Pass' if prediction_class == 1 else 'Fail',
@@ -83,17 +93,19 @@ def main():
     
     # Input fields for the 10 features
     input_data = {}
+    
+    # Numeric and categorical inputs
     input_data['studytime'] = st.sidebar.slider("Study Time (1-4)", min_value=1, max_value=4, value=2)
     input_data['absences'] = st.sidebar.number_input("Number of Absences (0-93)", min_value=0, max_value=93, value=0)
     input_data['G1'] = st.sidebar.number_input("G1 Grade (0-20)", min_value=0, max_value=20, value=10)
     input_data['G2'] = st.sidebar.number_input("G2 Grade (0-20)", min_value=0, max_value=20, value=10)
     input_data['age'] = st.sidebar.number_input("Age (15-22)", min_value=15, max_value=22, value=18)
-    input_data['famsize'] = st.sidebar.selectbox("Family Size", ['LE3', 'GT3'])  # 'LE3' for less than or equal to 3 members, 'GT3' for greater than 3 members
+    input_data['famsize'] = st.sidebar.selectbox("Family Size", ['LE3', 'GT3'])
     input_data['traveltime'] = st.sidebar.slider("Travel Time (1-4)", min_value=1, max_value=4, value=2)
     input_data['failures'] = st.sidebar.number_input("Number of Failures (0-4)", min_value=0, max_value=4, value=0)
     input_data['schoolsup'] = st.sidebar.selectbox("School Support", ['yes', 'no'])
     input_data['higher'] = st.sidebar.selectbox("Desire for Higher Education", ['yes', 'no'])
-
+    
     # Prediction button
     if st.sidebar.button("Predict Grade"):
         if classifier:
